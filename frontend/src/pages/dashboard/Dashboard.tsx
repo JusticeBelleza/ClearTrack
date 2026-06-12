@@ -1,34 +1,73 @@
+import { useState, useEffect } from "react";
 import { 
   Users, ShieldAlert, Activity, 
-  Server, Check, X, ShieldCheck, Clock, Building2
+  Server, ShieldCheck, Clock, Building2, Loader2
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { supabase } from "../../lib/supabase"; // Your live Vault key
 
 export default function Dashboard() {
+  // Live State Variables
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch real data from Supabase when the dashboard loads
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setIsLoading(true);
+      
+      try {
+        // 1. Get total number of registered employees
+        const { count } = await supabase
+          .from('user_profiles')
+          .select('*', { count: 'exact', head: true });
+          
+        if (count !== null) setTotalUsers(count);
+
+        // 2. Get the 5 most recently registered employees
+        const { data: users, error } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, email, role, offices(name)')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (error) throw error;
+        if (users) setRecentUsers(users);
+
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // Hardcoded for now until we build the document routing engine
   const sysMetrics = {
-    totalUsers: 142,
-    pendingApprovals: 5,
-    activeWorkflows: 18,
+    pendingApprovals: 0,
+    activeWorkflows: 0,
     systemUptime: "99.9%"
   };
 
-  const pendingRegistrations = [
-    { id: "REQ-001", name: "Maria Santos", email: "m.santos@abra.gov.ph", role: "Custodian", department: "Accounting Office", requestedAt: "2 hours ago" },
-    { id: "REQ-002", name: "Engr. Julian Perez", email: "j.perez@abra.gov.ph", role: "Originator", department: "Provincial Engineering", requestedAt: "5 hours ago" },
-    { id: "REQ-003", name: "Elena Gomez", email: "e.gomez@abra.gov.ph", role: "Signatory", department: "Governor's Office", requestedAt: "1 day ago" },
-  ];
-
   const auditLogs = [
-    { id: 1, action: "Workflow Template Updated", user: "Admin User", details: "Modified 'Payroll' SLA limit to 3 days", time: "10 mins ago", type: "config" },
-    { id: 2, action: "Failed Login Attempt", user: "Unknown IP", details: "3 failed attempts for pbo@abra.gov.ph", time: "1 hr ago", type: "security" },
-    { id: 3, action: "User Account Locked", user: "System", details: "Auto-locked pbo@abra.gov.ph due to failed logins", time: "1 hr ago", type: "security" },
-    { id: 4, action: "Bulk Document Archive", user: "System", details: "Archived 1,204 completed records from 2024", time: "12 hrs ago", type: "system" },
+    { id: 1, action: "System Initialized", user: "System", details: "ClearTrack environment booted", time: "Just now", type: "system" },
   ];
 
-  // Helper to get user initials for the avatar
   const getInitials = (name: string) => {
+    if (!name) return "??";
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-6">
@@ -39,19 +78,19 @@ export default function Dashboard() {
         <p className="text-sm text-gray-500">Oversee network health and access.</p>
       </div>
 
-      {/* Top Metric Cards - 2x2 Grid on Mobile */}
+      {/* Top Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-2">
           <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
             <Users className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-gray-900 leading-none">{sysMetrics.totalUsers}</h3>
+            <h3 className="text-xl font-bold text-gray-900 leading-none">{totalUsers}</h3>
             <p className="text-[11px] font-medium text-gray-500 mt-1 uppercase tracking-wider">Active Users</p>
           </div>
         </div>
 
-        <Link to="/admin/users?filter=pending" className="bg-white p-4 rounded-2xl border border-amber-200 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all hover:shadow-md active:scale-95 cursor-pointer group">
+        <Link to="/admin/users" className="bg-white p-4 rounded-2xl border border-amber-200 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all hover:shadow-md active:scale-95 cursor-pointer group">
           <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
           <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 group-hover:bg-amber-100">
             <ShieldAlert className="w-4 h-4" />
@@ -85,58 +124,46 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left Column: Mobile-Optimized Registration Cards */}
+        {/* Left Column: Real Users Database Feed */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-primary" />
-              Pending Requests
+              Recently Registered Personnel
             </h2>
           </div>
           
           <div className="space-y-3">
-            {pendingRegistrations.map((req) => (
+            {recentUsers.map((req) => (
               <div key={req.id} className="bg-white p-4 md:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-4 transition-all hover:border-gray-200 hover:shadow-md">
                  
-                 {/* Top Row: Avatar, Identity, Role Badge */}
                  <div className="flex justify-between items-start gap-2">
                     <div className="flex gap-3 items-center min-w-0">
                        <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-600 font-bold text-sm border border-gray-200 shrink-0">
-                          {getInitials(req.name)}
+                          {getInitials(req.full_name)}
                        </div>
                        <div className="min-w-0">
-                          <h4 className="font-semibold text-gray-900 text-sm truncate">{req.name}</h4>
+                          <h4 className="font-semibold text-gray-900 text-sm truncate">{req.full_name || 'Unknown User'}</h4>
                           <p className="text-xs text-gray-500 truncate">{req.email}</p>
                        </div>
                     </div>
-                    {/* Role Badge */}
                     <span className="shrink-0 bg-blue-50 text-blue-700 border border-blue-100 text-[10px] uppercase font-bold px-2 py-1 rounded-md tracking-wide">
                       {req.role}
                     </span>
                  </div>
 
-                 {/* Bottom Row: Department & Action Buttons */}
                  <div className="flex items-center justify-between pt-2 border-t border-gray-50">
                    <p className="text-xs font-medium text-gray-500 flex items-center gap-1.5 truncate pr-2">
                      <Building2 className="w-3.5 h-3.5 shrink-0" /> 
-                     <span className="truncate">{req.department}</span>
+                     <span className="truncate">{req.offices?.name || 'No Office Assigned'}</span>
                    </p>
-                   
-                   <div className="flex gap-2 shrink-0">
-                      <button className="w-9 h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-600 hover:bg-red-100 active:bg-red-200 transition-colors border border-red-100" title="Reject Request">
-                        <X className="w-4 h-4" />
-                      </button>
-                      <button className="w-9 h-9 flex items-center justify-center rounded-xl bg-primary text-white hover:bg-green-800 active:bg-green-900 transition-colors shadow-sm" title="Approve Request">
-                        <Check className="w-4 h-4" />
-                      </button>
-                   </div>
                  </div>
               </div>
             ))}
 
-            {pendingRegistrations.length === 0 && (
+            {recentUsers.length === 0 && (
               <div className="p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-100 border-dashed">
-                No pending registration requests at this time.
+                No personnel registered yet.
               </div>
             )}
           </div>
@@ -157,12 +184,8 @@ export default function Dashboard() {
                     <div className="absolute left-4 top-8 bottom-[-20px] w-[1px] bg-gray-100"></div>
                   )}
                   
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${
-                    log.type === 'security' ? 'bg-red-50 text-red-600 border border-red-100' : 
-                    log.type === 'config' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-gray-50 text-gray-600 border border-gray-200'
-                  }`}>
-                    {log.type === 'security' ? <ShieldAlert className="w-3.5 h-3.5" /> : 
-                     log.type === 'config' ? <Server className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 bg-blue-50 text-blue-600 border border-blue-100">
+                    <Server className="w-3.5 h-3.5" />
                   </div>
                   
                   <div>
