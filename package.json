@@ -1,0 +1,20 @@
+{
+  "name": "cleartrack",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:edge": "supabase functions serve",
+    "db:types": "supabase gen types typescript --linked > frontend/src/types/database.types.ts",
+    "test:e2e": "playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "tslib": "^2.8.1"
+  }
+}
