@@ -1,103 +1,132 @@
 import { useState, useEffect } from "react";
 import { 
   Users as UsersIcon, UserCheck, ShieldAlert, CheckCircle2, 
-  XCircle, Loader2, Building2, Briefcase, Mail, Phone, Shield
+  XCircle, Loader2, Building2, Briefcase, Mail, Phone, Shield,
+  AlertCircle, User
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+
+// Types
+type Toast = { message: string; type: 'success' | 'error' } | null;
+type ConfirmModal = { isOpen: boolean; action: 'approve' | 'revoke' | null; userId: string | null; userName: string };
 
 export default function Users() {
   const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pending' | 'active'>('pending');
   const [processingId, setProcessingId] = useState<string | null>(null);
+  
+  // Custom Notifications & Modals
+  const [toast, setToast] = useState<Toast>(null);
+  const [modal, setModal] = useState<ConfirmModal>({ isOpen: false, action: null, userId: null, userName: "" });
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
+  // --- TOAST NOTIFICATION HELPER ---
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      // Fetch users and join with the offices table to get the department name
       const { data, error } = await supabase
         .from('user_profiles')
-        .select(`
-          *,
-          offices ( name, code )
-        `)
+        .select(`*, offices ( name, code )`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       if (data) setUsers(data);
     } catch (err) {
       console.error("Error fetching users:", err);
+      showToast("Failed to load users.", "error");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleApprove = async (userId: string) => {
-    if (!window.confirm("Approve this user for system access?")) return;
-    setProcessingId(userId);
+  // --- MODAL ACTION EXECUTOR ---
+  const executeConfirm = async () => {
+    if (!modal.userId || !modal.action) return;
+    
+    setProcessingId(modal.userId);
+    const isApproving = modal.action === 'approve';
+    
     try {
       const { error } = await supabase
         .from('user_profiles')
-        .update({ is_approved: true })
-        .eq('id', userId);
-      
+        .update({ is_approved: isApproving })
+        .eq('id', modal.userId);
+        
       if (error) throw error;
-      await fetchUsers(); // Refresh the list
-    } catch (err: any) {
-      alert("Failed to approve user: " + err.message);
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleRevoke = async (userId: string) => {
-    if (!window.confirm("Revoke access for this user? They will no longer be able to log in.")) return;
-    setProcessingId(userId);
-    try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ is_approved: false })
-        .eq('id', userId);
       
-      if (error) throw error;
       await fetchUsers();
+      showToast(isApproving ? "User access approved successfully!" : "User access has been revoked.", "success");
     } catch (err: any) {
-      alert("Failed to revoke user: " + err.message);
+      showToast(err.message || `Failed to ${modal.action} user.`, "error");
     } finally {
       setProcessingId(null);
+      setModal({ isOpen: false, action: null, userId: null, userName: "" });
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: string) => {
-    if (!window.confirm(`Change this user's role to ${newRole.toUpperCase()}?`)) return;
-    setProcessingId(userId);
-    try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ role: newRole })
-        .eq('id', userId);
-      
-      if (error) throw error;
-      await fetchUsers();
-    } catch (err: any) {
-      alert("Failed to change role: " + err.message);
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  // Filter users based on the active tab
   const pendingUsers = users.filter(u => !u.is_approved);
   const activeUsers = users.filter(u => u.is_approved);
   const displayUsers = activeTab === 'pending' ? pendingUsers : activeUsers;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12 animate-in fade-in duration-500">
+    <div className="max-w-7xl mx-auto space-y-6 pb-12 animate-in fade-in duration-500 relative">
       
+      {/* FLOATING TOAST NOTIFICATION */}
+      {toast && (
+        <div className={`fixed bottom-8 right-8 z-50 flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl animate-in slide-in-from-bottom-5 fade-in duration-300 font-medium text-sm text-white ${toast.type === 'success' ? 'bg-gray-900' : 'bg-red-600'}`}>
+          {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <AlertCircle className="w-5 h-5 text-white" />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* CUSTOM CONFIRMATION MODAL */}
+      {modal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className={`p-6 text-center ${modal.action === 'approve' ? 'bg-green-50' : 'bg-red-50'}`}>
+              <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-4 ${modal.action === 'approve' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                {modal.action === 'approve' ? <UserCheck className="w-6 h-6" /> : <ShieldAlert className="w-6 h-6" />}
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {modal.action === 'approve' ? 'Approve Access?' : 'Revoke Access?'}
+              </h3>
+              <p className="text-sm text-gray-600">
+                {modal.action === 'approve' 
+                  ? <>Are you sure you want to grant system access to <strong className="text-gray-900">{modal.userName}</strong>?</> 
+                  : <>Are you sure you want to revoke access for <strong className="text-gray-900">{modal.userName}</strong>? They will be locked out immediately.</>}
+              </p>
+            </div>
+            <div className="p-4 bg-white flex gap-3">
+              <button 
+                onClick={() => setModal({ isOpen: false, action: null, userId: null, userName: "" })}
+                disabled={processingId === modal.userId}
+                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeConfirm}
+                disabled={processingId === modal.userId}
+                className={`flex-1 px-4 py-2.5 text-white rounded-xl font-bold text-sm transition-colors flex justify-center items-center gap-2 ${
+                  modal.action === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {processingId === modal.userId ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
@@ -112,9 +141,7 @@ export default function Users() {
         <button
           onClick={() => setActiveTab('pending')}
           className={`px-5 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'pending' 
-              ? 'border-amber-500 text-amber-600' 
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+            activeTab === 'pending' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
           <ShieldAlert className="w-4 h-4" />
@@ -128,9 +155,7 @@ export default function Users() {
         <button
           onClick={() => setActiveTab('active')}
           className={`px-5 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'active' 
-              ? 'border-primary text-primary' 
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+            activeTab === 'active' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
           <UserCheck className="w-4 h-4" />
@@ -138,7 +163,7 @@ export default function Users() {
         </button>
       </div>
 
-      {/* User List */}
+      {/* Main Table Area */}
       {isLoading ? (
         <div className="py-20 flex justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-gray-300" />
@@ -150,81 +175,97 @@ export default function Users() {
           <p className="text-gray-500 text-sm mt-1">There are no {activeTab} users to display.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {displayUsers.map((user) => (
-            <div key={user.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-all relative overflow-hidden group">
-              
-              {/* Colored Edge Strip */}
-              <div className={`absolute top-0 left-0 w-1 h-full ${!user.is_approved ? 'bg-amber-400' : user.role === 'system_admin' ? 'bg-purple-500' : 'bg-green-500'}`}></div>
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase tracking-wider text-[10px] font-bold">
+                <tr>
+                   <th className="px-6 py-4">Employee Details</th>
+                   <th className="px-6 py-4">Department & Position</th>
+                   <th className="px-6 py-4">Contact Info</th>
+                   {activeTab === 'active' && <th className="px-6 py-4">System Access Level</th>}
+                   <th className="px-6 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {displayUsers.map((user) => (
+                   <tr key={user.id} className="hover:bg-gray-50/50 transition-colors group">
+                     
+                     {/* Column 1: Identity */}
+                     <td className="px-6 py-4">
+                       <div className="flex items-center gap-3">
+                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${!user.is_approved ? 'bg-amber-100 text-amber-700' : user.role === 'system_admin' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                           {user.full_name?.substring(0,2).toUpperCase()}
+                         </div>
+                         <div>
+                           <p className="font-bold text-gray-900">{user.full_name}</p>
+                           <p className="text-xs text-gray-500 font-mono mt-0.5">ID: {user.employee_id}</p>
+                         </div>
+                       </div>
+                     </td>
 
-              <div className="flex justify-between items-start mb-4 pl-2">
-                <div>
-                  <h3 className="font-bold text-gray-900 text-lg">{user.full_name}</h3>
-                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 font-mono">
-                    ID: {user.employee_id}
-                  </p>
-                </div>
-                {user.role === 'system_admin' && (
-                  <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] px-2 py-1 rounded font-bold flex items-center gap-1 uppercase tracking-wider shrink-0">
-                    <Shield className="w-3 h-3" /> Admin
-                  </span>
-                )}
-              </div>
+                     {/* Column 2: Department */}
+                     <td className="px-6 py-4">
+                       <div className="flex items-center gap-2 text-gray-900 font-medium">
+                         <Building2 className="w-4 h-4 text-gray-400" />
+                         {user.offices?.code || 'N/A'} - {user.offices?.name || 'Unassigned'}
+                       </div>
+                       <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                         <Briefcase className="w-3.5 h-3.5 text-gray-400" />
+                         {user.designation} <span className="text-gray-400">({user.employment_status})</span>
+                       </div>
+                     </td>
 
-              <div className="space-y-2.5 mb-5 pl-2">
-                <div className="flex items-start gap-2 text-sm text-gray-600">
-                  <Building2 className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-                  <span className="leading-snug font-medium">{user.offices?.name || 'No Office Assigned'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Briefcase className="w-4 h-4 text-gray-400 shrink-0" />
-                  <span>{user.designation} <span className="text-gray-400 text-xs">({user.employment_status})</span></span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Mail className="w-4 h-4 text-gray-400 shrink-0" />
-                  <a href={`mailto:${user.email}`} className="hover:text-primary transition-colors">{user.email}</a>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Phone className="w-4 h-4 text-gray-400 shrink-0" />
-                  <span>{user.contact_number || 'N/A'}</span>
-                </div>
-              </div>
+                     {/* Column 3: Contact */}
+                     <td className="px-6 py-4">
+                        <div className="flex items-center gap-2 text-gray-600 text-sm">
+                          <Mail className="w-4 h-4 text-gray-400" />
+                          <a href={`mailto:${user.email}`} className="hover:text-primary transition-colors">{user.email}</a>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-500 text-xs mt-1">
+                          <Phone className="w-3.5 h-3.5 text-gray-400" />
+                          {user.contact_number || 'N/A'}
+                        </div>
+                     </td>
 
-              <div className="pt-4 border-t border-gray-100 flex gap-2 pl-2">
-                {activeTab === 'pending' ? (
-                  <button
-                    onClick={() => handleApprove(user.id)}
-                    disabled={processingId === user.id}
-                    className="flex-1 bg-green-50 hover:bg-green-100 text-green-700 font-bold py-2 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
-                  >
-                    {processingId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
-                    Approve Access
-                  </button>
-                ) : (
-                  <>
-                    <select 
-                      value={user.role} 
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      disabled={processingId === user.id}
-                      className="bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg px-2 py-2 outline-none focus:ring-2 focus:ring-primary w-full"
-                    >
-                      <option value="staff">Capitol Staff</option>
-                      <option value="system_admin">System Admin</option>
-                    </select>
-                    <button
-                      onClick={() => handleRevoke(user.id)}
-                      disabled={processingId === user.id}
-                      title="Revoke Access"
-                      className="px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center shrink-0"
-                    >
-                      {processingId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                    </button>
-                  </>
-                )}
-              </div>
+                     {/* Column 4: STATIC READ-ONLY ROLE BADGE */}
+                     {activeTab === 'active' && (
+                       <td className="px-6 py-4">
+                         <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider border ${
+                           user.role === 'system_admin' 
+                            ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                            : 'bg-gray-50 text-gray-600 border-gray-200'
+                         }`}>
+                           {user.role === 'system_admin' ? <Shield className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                           {user.role === 'system_admin' ? 'System Admin' : 'Capitol Staff'}
+                         </span>
+                       </td>
+                     )}
 
-            </div>
-          ))}
+                     {/* Column 5: Actions */}
+                     <td className="px-6 py-4 text-right">
+                       {activeTab === 'pending' ? (
+                         <button
+                           onClick={() => setModal({ isOpen: true, action: 'approve', userId: user.id, userName: user.full_name })}
+                           className="inline-flex items-center gap-2 bg-green-50 hover:bg-green-100 text-green-700 font-bold px-4 py-2 rounded-lg text-sm transition-colors"
+                         >
+                           <UserCheck className="w-4 h-4" /> Approve
+                         </button>
+                       ) : (
+                         <button
+                           onClick={() => setModal({ isOpen: true, action: 'revoke', userId: user.id, userName: user.full_name })}
+                           className="inline-flex items-center gap-2 text-gray-500 hover:text-red-600 hover:bg-red-50 font-bold px-3 py-2 rounded-lg text-sm transition-colors"
+                         >
+                           <XCircle className="w-4 h-4" /> Revoke
+                         </button>
+                       )}
+                     </td>
+
+                   </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

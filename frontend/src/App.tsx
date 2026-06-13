@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
+import AdminRoute from "./components/layout/AdminRoute";
 
 // --- Layouts ---
 import MainLayout from "./components/layout/MainLayout";
@@ -12,10 +13,15 @@ import Register from "./pages/auth/Register";
 // --- Staff Pages ---
 import Dashboard from "./pages/dashboard/Dashboard";
 import CreateDocument from "./pages/documents/CreateDocument";
+import ScanQR from "./pages/documents/ScanQR";
+import History from "./pages/documents/History";
+import Track from "./pages/documents/Track"; // <-- Added Track Route
 
 // --- Admin Pages ---
 import Users from "./pages/admin/Users";
 import Configs from "./pages/admin/Configs";
+import AuditLogs from "./pages/admin/AuditLogs";
+import Archive from "./pages/admin/Archive";
 
 export default function App() {
   return (
@@ -27,28 +33,30 @@ export default function App() {
           <Route path="/register" element={<Register />} />
 
           {/* --- SECURED CAPITOL PORTAL --- */}
-          {/* All routes inside here require an approved, logged-in account */}
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<MainLayout />}>
               
-              {/* Dashboard / Command Center */}
+              {/* Universal Dashboard (Splits Admin vs Staff internally) */}
               <Route index element={<Dashboard />} />
               
-              {/* Staff Document Routes */}
+              {/* STAFF ROUTES (Open to all approved employees) */}
               <Route path="documents/new" element={<CreateDocument />} />
-              <Route path="scan" element={<div className="p-8 text-gray-500">QR Scanner coming soon...</div>} />
-              <Route path="history" element={<div className="p-8 text-gray-500">My History coming soon...</div>} />
+              <Route path="scan" element={<ScanQR />} />
+              <Route path="history" element={<History />} />
+              <Route path="track" element={<Track />} />
               
-              {/* System Admin Routes */}
-              <Route path="admin/users" element={<Users />} />
-              <Route path="admin/configs" element={<Configs />} />
-              <Route path="admin/audit" element={<div className="p-8 text-gray-500">Global Audit Log coming soon...</div>} />
-              <Route path="admin/archive" element={<div className="p-8 text-gray-500">Archived Documents coming soon...</div>} />
+              {/* STRICT SYSTEM ADMIN ROUTES (Locked via AdminRoute) */}
+              <Route element={<AdminRoute />}>
+                <Route path="admin/users" element={<Users />} />
+                <Route path="admin/configs" element={<Configs />} />
+                <Route path="admin/audit" element={<AuditLogs />} />
+                <Route path="admin/archive" element={<Archive />} />
+              </Route>
               
             </Route>
           </Route>
 
-          {/* CATCH-ALL: Redirects invalid URLs to home */}
+          {/* CATCH-ALL: Redirects invalid or broken URLs back to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
